@@ -1,6 +1,7 @@
 ---
 import '~/styles/global.css'
 import { pricingUrl } from '@chirag127/astro-shell/pricing-url'
+import FamilySidebar from '@chirag127/astro-shell/components/FamilySidebar.astro'
 
 interface Props {
   title?: string
@@ -40,7 +41,25 @@ const pricingHref = pricingUrl('oriz-paper-print-tools-app')
         <a href="https://account.oriz.in/sign-in">sign in</a>
       </nav>
     </header>
-    <main id="main"><slot /></main>
+    <main id="main">
+      <div class="oriz-shell">
+        <FamilySidebar slug="oriz-paper-print-tools-app" title="Print Tools">
+          <a slot="tools" href="/tools/avery/">Avery labels</a>
+          <a slot="tools" href="/tools/booklet/">Booklet imposition</a>
+          <a slot="tools" href="/tools/business-card/">Business cards</a>
+          <a slot="tools" href="/tools/calendar/">Calendar</a>
+          <a slot="tools" href="/tools/checklist/">Checklist</a>
+          <a slot="tools" href="/tools/graph-paper/">Graph paper</a>
+          <a slot="tools" href="/tools/label-maker/">Label maker</a>
+          <a slot="tools" href="/tools/n-up/">N-up</a>
+          <a slot="tools" href="/tools/page-numbers/">Page numbers</a>
+          <a slot="tools" href="/tools/pdf-printable/">PDF printable</a>
+          <a slot="tools" href="/tools/preview/">Print preview</a>
+          <a slot="tools" href="/tools/qr-stickers/">QR stickers</a>
+        </FamilySidebar>
+        <main class="oriz-main"><slot /></main>
+      </div>
+    </main>
     <footer class="site">
       <span>Oriz Print · part of the <a href="https://oriz.in">oriz</a> family · runs in your browser</span>
       <span>

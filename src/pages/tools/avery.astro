@@ -1,15 +1,46 @@
 ---
 import BaseLayout from '~/layouts/BaseLayout.astro'
 ---
-<BaseLayout title="Avery label sheet — Oriz Print" description="Avery label sheet — runs in your browser. Part of Oriz Print.">
+<BaseLayout title="Avery label sheet — Oriz Print" description="Generate Avery-compatible label sheets. Paste one label per line, pick a template, print or save as PDF. Runs in your browser.">
   <article class="tool">
     <p class="back mono"><a href="/">← all tools</a></p>
     <h1 class="h1">Avery label sheet</h1>
-    <p class="status mono">coming · v0.1</p>
-    <p class="lede">
-      This feature is on the v0.1 roadmap. The page exists so we can iterate on
-      the design and copy in parallel; the implementation lands next sprint.
-    </p>
+    <p class="status mono ready">ready</p>
+    <p class="lede">Paste one label per line, pick a template, and print a print-perfect Avery sheet. Everything runs in your browser.</p>
+
+    <div class="controls">
+      <label>Template
+        <select id="tpl">
+          <option value="5160">5160 — 1" × 2 5/8" (30 per sheet, US Letter)</option>
+          <option value="5161">5161 — 1" × 4" (20 per sheet, US Letter)</option>
+          <option value="5163">5163 — 2" × 4" (10 per sheet, US Letter)</option>
+          <option value="L7160">L7160 — 63.5 × 38.1 mm (21 per sheet, A4)</option>
+          <option value="L7163">L7163 — 99.1 × 38.1 mm (14 per sheet, A4)</option>
+        </select>
+      </label>
+      <label>Font size
+        <select id="fs">
+          <option value="9">9 pt</option>
+          <option value="10" selected>10 pt</option>
+          <option value="11">11 pt</option>
+          <option value="12">12 pt</option>
+        </select>
+      </label>
+      <label class="repeat"><input id="repeat" type="checkbox" /> repeat first label to fill sheet</label>
+    </div>
+
+    <label class="block">Labels (one per line; blank line = blank cell)
+      <textarea id="src" rows="8" placeholder="Acme Corp&#10;123 Main St&#10;Springfield, IL 62701"></textarea>
+    </label>
+
+    <p id="err" class="err mono" hidden></p>
+
+    <div class="actions">
+      <button id="render" class="btn btn-primary">Render preview</button>
+      <button id="print" class="btn">Print</button>
+    </div>
+
+    <div id="sheet-wrap" class="sheet-wrap" aria-live="polite"></div>
   </article>
 </BaseLayout>
 
@@ -21,18 +52,104 @@ import BaseLayout from '~/layouts/BaseLayout.astro'
   .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
   .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
   .status.ready { color: var(--accent); }
-  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; }
-  .placeholder { max-width: 60ch; }
-  .placeholder p { color: var(--muted); margin: 0 0 1rem; }
-  .io {
-    width: 100%;
-    padding: 1rem;
-    background: var(--paper-2);
-    border: 1px solid var(--rule);
-    color: var(--ink);
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    resize: vertical;
+  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; margin: 0 0 1.5rem; }
+  .controls { display: flex; flex-wrap: wrap; gap: 0.75rem 1rem; margin-bottom: 1rem; }
+  label { font-size: 0.875rem; color: var(--muted); display: flex; flex-direction: column; gap: 0.2rem; }
+  label.repeat { flex-direction: row; align-items: center; gap: 0.4rem; }
+  label.block { display: block; margin-bottom: 1rem; }
+  select, textarea {
+    padding: 0.4rem 0.6rem; background: var(--paper-2); border: 1px solid var(--rule);
+    color: var(--ink); font-family: var(--font-mono); font-size: 0.875rem;
   }
-  .hint { font-size: 11px; color: var(--muted); margin-top: 0.75rem; }
+  textarea { width: 100%; resize: vertical; }
+  .err { color: #b00020; font-size: 12px; margin: 0 0 0.75rem; }
+  .actions { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; }
+  .btn { padding: 0.4rem 0.9rem; border: 1px solid var(--rule); background: var(--paper-2);
+    color: var(--ink); font-family: var(--font-mono); font-size: 0.8rem; cursor: pointer; letter-spacing: 0.04em; }
+  .btn:hover { background: var(--ink); color: var(--paper); }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { opacity: 0.85; background: var(--accent); color: #fff; }
+  .sheet-wrap { background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,0.1); margin: 0 auto; }
+  .sheet { background: #fff; color: #15140f; position: relative; }
+  .cell { position: absolute; overflow: hidden; padding: 4px; box-sizing: border-box; outline: 1px dashed #ccc; font-family: Inter, system-ui, sans-serif; }
+  .cell pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: inherit; }
+  @media print {
+    .back, .status, .lede, .controls, .err, .actions, header.site, footer.site, .oriz-sidebar { display: none !important; }
+    .h1 { display: none; }
+    .sheet-wrap { box-shadow: none; margin: 0; }
+    .cell { outline: none; }
+    @page { margin: 0; }
+    body { background: #fff; }
+  }
 </style>
+
+<script>
+  type Tpl = { name:string; pageW:number; pageH:number; cols:number; rows:number;
+    cellW:number; cellH:number; mLeft:number; mTop:number; gapX:number; gapY:number; unit:'in'|'mm' };
+  const TEMPLATES: Record<string, Tpl> = {
+    '5160': { name:'5160', pageW:8.5, pageH:11, cols:3, rows:10, cellW:2.625, cellH:1.0, mLeft:0.1875, mTop:0.5, gapX:0.125, gapY:0, unit:'in' },
+    '5161': { name:'5161', pageW:8.5, pageH:11, cols:2, rows:10, cellW:4.0, cellH:1.0, mLeft:0.15625, mTop:0.5, gapX:0.1875, gapY:0, unit:'in' },
+    '5163': { name:'5163', pageW:8.5, pageH:11, cols:2, rows:5, cellW:4.0, cellH:2.0, mLeft:0.15625, mTop:0.5, gapX:0.1875, gapY:0, unit:'in' },
+    'L7160': { name:'L7160', pageW:210, pageH:297, cols:3, rows:7, cellW:63.5, cellH:38.1, mLeft:7.2, mTop:15.1, gapX:2.5, gapY:0, unit:'mm' },
+    'L7163': { name:'L7163', pageW:210, pageH:297, cols:2, rows:7, cellW:99.1, cellH:38.1, mLeft:4.65, mTop:15, gapX:2.5, gapY:0, unit:'mm' },
+  };
+
+  const tplEl = document.getElementById('tpl') as HTMLSelectElement;
+  const fsEl = document.getElementById('fs') as HTMLSelectElement;
+  const repeatEl = document.getElementById('repeat') as HTMLInputElement;
+  const srcEl = document.getElementById('src') as HTMLTextAreaElement;
+  const errEl = document.getElementById('err') as HTMLElement;
+  const wrap = document.getElementById('sheet-wrap') as HTMLElement;
+
+  function parseLabels(text: string): string[] {
+    const blocks = text.split(/\n\s*\n/);
+    return blocks.map(b => b.trim());
+  }
+
+  function render() {
+    try {
+      errEl.hidden = true;
+      const tpl = TEMPLATES[tplEl.value];
+      if (!tpl) throw new Error('Unknown template');
+      const dpi = tpl.unit === 'in' ? 96 : 96/25.4;
+      const sheet = document.createElement('div');
+      sheet.className = 'sheet';
+      sheet.style.width = (tpl.pageW * dpi) + 'px';
+      sheet.style.height = (tpl.pageH * dpi) + 'px';
+      const labels = parseLabels(srcEl.value);
+      const cap = tpl.cols * tpl.rows;
+      const items: string[] = [];
+      for (let i=0; i<cap; i++) {
+        if (repeatEl.checked && labels.length) items.push(labels[0] || '');
+        else items.push(labels[i] || '');
+      }
+      for (let r=0; r<tpl.rows; r++) {
+        for (let c=0; c<tpl.cols; c++) {
+          const idx = r*tpl.cols + c;
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          cell.style.left = ((tpl.mLeft + c*(tpl.cellW + tpl.gapX)) * dpi) + 'px';
+          cell.style.top = ((tpl.mTop + r*(tpl.cellH + tpl.gapY)) * dpi) + 'px';
+          cell.style.width = (tpl.cellW * dpi) + 'px';
+          cell.style.height = (tpl.cellH * dpi) + 'px';
+          cell.style.fontSize = fsEl.value + 'pt';
+          const pre = document.createElement('pre');
+          pre.textContent = items[idx] || '';
+          cell.appendChild(pre);
+          sheet.appendChild(cell);
+        }
+      }
+      wrap.innerHTML = '';
+      wrap.style.width = (tpl.pageW * dpi) + 'px';
+      wrap.appendChild(sheet);
+    } catch (e:any) {
+      errEl.hidden = false;
+      errEl.textContent = 'Error: ' + (e?.message || String(e));
+    }
+  }
+
+  document.getElementById('render')!.addEventListener('click', render);
+  document.getElementById('print')!.addEventListener('click', () => { render(); setTimeout(() => window.print(), 50); });
+  srcEl.value = 'Jane Smith\n123 Main St\nSpringfield, IL 62701';
+  render();
+</script>
